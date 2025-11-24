@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Live camera particle Effect</title>
+<style>
+  :root{--bg:#061017;--panel:#0f1820;--accent:#06b6d4;--Separate_Color:#6bffa9}
+  body{margin:0;min-height:100vh;background:var(--bg);color:#e6f7fa;font-family:Inter,Segoe UI,Arial;padding:12px;display:flex;flex-direction:column;align-items:center;gap:10px}
+  h1{font-size:16px;margin:0}
+  .wrap{width:100%;max-width:1100px;position:relative}
+  canvas{width:100%;height:auto;border-radius:10px;background:#000;display:block;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+  .controls{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:8px;background:rgba(255,255,255,0.02);padding:10px;border-radius:8px;font-size:12px}
+  label{color:#bfecef;display:flex;justify-content:space-between}
+  input[type=range]{width:100%}
+  .note{font-size:11px;color:#9fbfc6;margin-top:6px}
+  .btn-group{position:absolute;top:10px;right:10px;display:flex;gap:6px}
+  .btn{background:var(--accent);color:#000;border:0;border-radius:5px;padding:5px 10px;font-size:12px;cursor:pointer}
+  .btn.off{background:#555}
+
+  #cbmin { accent-color: var(--Separate_Color); }
+  #vmin { accent-color: var(--Separate_Color);}
+  #particleAmmount { accent-color: var(--Separate_Color);}
+  #emitRate { accent-color: var(--Separate_Color);}
+  #densityMult { accent-color: var(--Separate_Color);}
+  #burstSpeed { accent-color: var(--Separate_Color);}
+  #size { accent-color: var(--Separate_Color);}
+  #lifetime { accent-color: var(--Separate_Color);}
+
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>For starters;- Just tweak the green sliders and turn on skin mask. After masking skin hide camera</h1>
+    <div class="btn-group">
+      <button id="toggleCamera" class="btn">Hide Camera</button>
+      <button id="toggleMask" class="btn">Show Mask</button>
+    </div>
+    <canvas id="out" width="1280" height="720"></canvas>
+
+    <details open>
+      <summary>Skin Thresholds (YCbCr + HSV)</summary>
+      <div class="controls" id="skinControls">
+        <div><label>Cb min <span id="cbminVal">141</span></label><input id="cbmin" type="range" min="0" max="255" value="141"></div>
+        <div><label>Cb max <span id="cbmaxVal">150</span></label><input id="cbmax" type="range" min="0" max="255" value="150"></div>
+        <div><label>Cr min <span id="crminVal">120</span></label><input id="crmin" type="range" min="0" max="255" value="120"></div>
+        <div><label>Cr max <span id="crmaxVal">200</span></label><input id="crmax" type="range" min="0" max="255" value="200"></div>
+        <div><label>H min <span id="hminVal">0</span></label><input id="hmin" type="range" min="0" max="360" value="0"></div>
+        <div><label>H max <span id="hmaxVal">50</span></label><input id="hmax" type="range" min="0" max="360" value="50"></div>
+        <div><label>S min <span id="sminVal">0.15</span></label><input id="smin" type="range" min="0" max="1" step="0.01" value="0.15"></div>
+        <div><label>V min <span id="vminVal">0.25</span></label><input id="vmin" type="range" min="0" max="1" step="0.01" value="0.25"></div>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Particle Controls</summary>
+      <div class="controls" id="particleControls">
+        <div><label>Particle Amount <span id="particleAmountVal">1000</span></label><input id="particleAmount" type="range" min="100" max="2000" value="1000"></div>
+        <div><label>Emit Rate <span id="emitRateVal">100</span></label><input id="emitRate" type="range" min="1" max="100" value="100"></div>
+        <div><label>Density × <span id="densityMultVal">3</span></label><input id="densityMult" type="range" min="1" max="5" value="3"></div>
+        <div><label>Burst Speed <span id="burstSpeedVal">80</span></label><input id="burstSpeed" type="range" min="0" max="300" value="80"></div>
+        <div><label>Flow Strength <span id="flowStrengthVal">0.8</span></label><input id="flowStrength" type="range" min="0.1" max="2.0" step="0.1" value="0.8"></div>
+        <div><label>Trail Length <span id="trailLenVal">8</span></label><input id="trailLen" type="range" min="0" max="12" value="8"></div>
+        <div><label>Trail Fade <span id="trailFadeVal">0.85</span></label><input id="trailFade" type="range" min="0.0" max="1.0" step="0.05" value="0.85"></div>
+        <div><label>Color Boost <span id="colorBoostVal">1.5</span></label><input id="colorBoost" type="range" min="1.0" max="3.0" step="0.1" value="1.5"></div>
+        <div><label>Size <span id="sizeVal">4</span></label><input id="size" type="range" min="1" max="8" value="4"></div>
+        <div><label>Lifetime <span id="lifetimeVal">1.2</span>s</label><input id="lifetime" type="range" min="0.5" max="3" step="0.1" value="1.2"></div>
+      </div>
+    </details>
+
+    <div class="note">✅ Working. Mirrored particles. No freeze. Particle Amount slider works.</div>
+  </div>
+
+<script>
+(async function(){
+  const out = document.getElementById('out');
+  const ctx = out.getContext('2d', { willReadFrequently: true });
+  const toggleCameraBtn = document.getElementById('toggleCamera');
+  const toggleMaskBtn = document.getElementById('toggleMask');
+
+  // Sliders
+  const cbmin = document.getElementById('cbmin'), cbmax = document.getElementById('cbmax'),
+        crmin = document.getElementById('crmin'), crmax = document.getElementById('crmax'),
+        hmin = document.getElementById('hmin'), hmax = document.getElementById('hmax'),
+        smin = document.getElementById('smin'), vmin = document.getElementById('vmin');
+
+  const particleAmountEl = document.getElementById('particleAmount');
+  const emitRateEl = document.getElementById('emitRate');
+  const densityMultEl = document.getElementById('densityMult');
+  const burstSpeedEl = document.getElementById('burstSpeed');
+  const flowStrengthEl = document.getElementById('flowStrength');
+  const trailLenEl = document.getElementById('trailLen');
+  const trailFadeEl = document.getElementById('trailFade');
+  const colorBoostEl = document.getElementById('colorBoost');
+  const sizeEl = document.getElementById('size');
+  const lifetimeEl = document.getElementById('lifetime');
+
+  // ✅ Sync labels
+  const sync = (el, id) => el.addEventListener('input', () => {
+    let val = parseFloat(el.value);
+    document.getElementById(id).textContent = 
+      el.step === '0.01' ? val.toFixed(2) :
+      el.step === '0.1' ? val.toFixed(1) :
+      Math.round(val);
+  });
+  [cbmin,cbmax,crmin,crmax,hmin,hmax,smin,vmin,particleAmountEl,emitRateEl,densityMultEl,burstSpeedEl,flowStrengthEl,trailLenEl,trailFadeEl,colorBoostEl,sizeEl,lifetimeEl]
+    .forEach(el => sync(el, el.id + 'Val'));
+
+  // ✅ Update maxParticles only on slider change
+  let maxParticles = parseInt(particleAmountEl.value);
+  particleAmountEl.addEventListener('input', () => {
+    maxParticles = parseInt(particleAmountEl.value);
+  });
+
+  // Toggles
+  let showCamera = true;
+  let showMask = false;
+
+  toggleCameraBtn.onclick = () => {
+    showCamera = !showCamera;
+    toggleCameraBtn.textContent = showCamera ? 'Hide Camera' : 'Show Camera';
+    toggleCameraBtn.classList.toggle('off', !showCamera);
+  };
+
+  toggleMaskBtn.onclick = () => {
+    showMask = !showMask;
+    toggleMaskBtn.textContent = showMask ? 'Hide Mask' : 'Show Mask';
+    toggleMaskBtn.classList.toggle('off', showMask);
+  };
+
+  // Video
+  const video = document.createElement('video');
+  video.autoplay = true; video.muted = true; video.playsInline = true;
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, 
+      audio: false 
+    });
+    video.srcObject = stream;
+    await video.play();
+    out.width = video.videoWidth || 1280;
+    out.height = video.videoHeight || 720;
+  } catch (err) {
+    alert("Camera access denied.");
+    return;
+  }
+
+  // Processing canvas
+  const procCanvas = document.createElement('canvas');
+  const pctx = procCanvas.getContext('2d', { willReadFrequently: true });
+  let procW = 640, procH = 360;
+  procCanvas.width = procW;
+  procCanvas.height = procH;
+
+  // Color helpers
+  function rgbToYCbCr(r,g,b){
+    const y = 0.299*r + 0.587*g + 0.114*b;
+    const cb = 128 - 0.168736*r - 0.331264*g + 0.5*b;
+    const cr = 128 + 0.5*r - 0.418688*g - 0.081312*b;
+    return [y, cb, cr];
+  }
+  function rgbToHsv(r,g,b){
+    r/=255; g/=255; b/=255;
+    const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx - mn;
+    let h=0, s = mx === 0 ? 0 : d/mx, v = mx;
+    if (d !== 0){
+      if (mx === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (mx === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h = (h/6) * 360;
+    }
+    return [h, s, v];
+  }
+  function enhanceColor(r, g, b) {
+    const boost = parseFloat(colorBoostEl.value);
+    let [h, s, v] = rgbToHsv(r, g, b);
+    s = Math.min(1, s * boost);
+    v = Math.min(1, v * boost);
+    const [er, eg, eb] = hsvToRgb(h, s, v);
+    return [
+      Math.max(0, Math.min(255, Math.round(er))),
+      Math.max(0, Math.min(255, Math.round(eg))),
+      Math.max(0, Math.min(255, Math.round(eb)))
+    ];
+  }
+  function hsvToRgb(h, s, v) {
+    h = h / 360;
+    s = Math.max(0, Math.min(1, s));
+    v = Math.max(0, Math.min(1, v));
+    let r, g, b;
+    if (s === 0) { r = g = b = v; }
+    else {
+      const i = Math.floor(h * 6);
+      const f = h * 6 - i;
+      const p = v * (1 - s);
+      const q = v * (1 - s * f);
+      const t = v * (1 - s * (1 - f));
+      switch (i % 6) {
+        case 0: r = v; g = t; b = p; break;
+        case 1: r = q; g = v; b = p; break;
+        case 2: r = p; g = v; b = t; break;
+        case 3: r = p; g = q; b = v; break;
+        case 4: r = t; g = p; b = v; break;
+        case 5: r = v; g = p; b = q; break;
+      }
+    }
+    return [r * 255, g * 255, b * 255];
+  }
+
+  // ✅ Particles
+  const particles = [];
+
+  class Particle {
+    constructor(x, y, r, g, b) {
+      this.x = x;
+      this.y = y;
+      this.birth = performance.now();
+      this.lifetime = parseFloat(lifetimeEl.value) * 1000;
+      this.trail = [];
+      this.maxTrail = parseInt(trailLenEl.value) || 0;
+      this.size = parseFloat(sizeEl.value);
+
+      // Burst: radial velocity
+      this.burstAngle = Math.random() * Math.PI * 2;
+      this.burstSpeed = parseFloat(burstSpeedEl.value) * 0.033;
+
+      // Flow field: global wind
+      this.flowAngle = Math.random() * Math.PI * 2;
+      this.flowSpeed = parseFloat(flowStrengthEl.value) * 0.033;
+
+      this.r = r;
+      this.g = g;
+      this.b = b;
+    }
+
+    update() {
+      const now = performance.now();
+      const age = (now - this.birth) / this.lifetime;
+      if (age >= 1) return false;
+
+      // Burst: radial velocity
+      const burstX = Math.cos(this.burstAngle) * this.burstSpeed;
+      const burstY = Math.sin(this.burstAngle) * this.burstSpeed;
+
+      // Flow: global wind
+      const flowX = Math.cos(this.flowAngle) * this.flowSpeed;
+      const flowY = Math.sin(this.flowAngle) * this.flowSpeed;
+
+      // Combine burst + flow
+      this.x += burstX + flowX;
+      this.y += burstY + flowY;
+
+      // Update trail
+      if (this.maxTrail > 0) {
+        this.trail.push({x: this.x, y: this.y});
+        if (this.trail.length > this.maxTrail) this.trail.shift();
+      }
+
+      return true;
+    }
+
+    draw(ctx) {
+      const now = performance.now();
+      const age = (now - this.birth) / this.lifetime;
+      const alpha = 1 - age;
+      const size = this.size;
+
+      // Draw trail as thick line segments — same width as particle
+      if (this.trail.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y);
+        for (let i = this.trail.length - 1; i >= 0; i--) {
+          const pt = this.trail[i];
+          const tAlpha = alpha * Math.pow(parseFloat(trailFadeEl.value), this.trail.length - i);
+          ctx.strokeStyle = `rgba(${this.r},${this.g},${this.b},${tAlpha})`;
+          ctx.lineWidth = size * 0.8; // same as particle size
+          ctx.lineCap = 'round';
+          ctx.lineTo(pt.x, pt.y);
+          ctx.stroke();
+        }
+      }
+
+      // Draw head
+      ctx.fillStyle = `rgba(${this.r},${this.g},${this.b},${alpha * 0.8})`;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Main loop
+  function processFrame(){
+    if (video.readyState < 2) return requestAnimationFrame(processFrame);
+
+    ctx.clearRect(0, 0, out.width, out.height);
+
+    // ✅ Mirror camera: scale(-1,1)
+    if (showCamera) {
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, -out.width, 0, out.width, out.height);
+      ctx.restore();
+    }
+
+    // Sample low-res frame
+    pctx.drawImage(video, 0, 0, procW, procH);
+    const img = pctx.getImageData(0, 0, procW, procH);
+    const data = img.data;
+
+    // Compute mask confidence
+    const maskConf = new Float32Array(procW * procH);
+    const cbMin = Number(cbmin.value), cbMax = Number(cbmax.value);
+    const crMin = Number(crmin.value), crMax = Number(crmax.value);
+    const hMin = Number(hmin.value), hMax = Number(hmax.value);
+    const sMin = Number(smin.value), vMin = Number(vmin.value);
+
+    let p = 0;
+    for (let i = 0; i < maskConf.length; i++) {
+      const r = data[p++], g = data[p++], b = data[p++], a = data[p++];
+      const [, cb, cr] = rgbToYCbCr(r,g,b);
+      const ycbcrOk = (cb >= cbMin && cb <= cbMax && cr >= crMin && cr <= crMax);
+      const [h, s, v] = rgbToHsv(r,g,b);
+      let hsvOk = false;
+      if (hMin <= hMax) hsvOk = (h >= hMin && h <= hMax && s >= sMin && v >= vMin);
+      else hsvOk = ((h >= hMin || h <= hMax) && s >= sMin && v >= vMin);
+
+      let conf = 0;
+      if (ycbcrOk && hsvOk) conf = 1.0;
+      else if (ycbcrOk || hsvOk) conf = 0.6;
+      maskConf[i] = conf;
+    }
+
+    // ✅ Show mask overlay (mirrored)
+    if (showMask && showCamera) {
+      ctx.save();
+      ctx.scale(-1, 1);
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = procW;
+      maskCanvas.height = procH;
+      const mctx = maskCanvas.getContext('2d', { willReadFrequently: true });
+      const maskImg = mctx.createImageData(procW, procH);
+      const mdata = maskImg.data;
+      let q = 0;
+      for (let i = 0; i < maskConf.length; i++) {
+        const alpha = maskConf[i] * 0.3;
+        mdata[q++] = 255; // R
+        mdata[q++] = 0;   // G
+        mdata[q++] = 0;   // B
+        mdata[q++] = Math.round(alpha * 255);
+      }
+      mctx.putImageData(maskImg, 0, 0);
+      ctx.drawImage(maskCanvas, -out.width, 0, out.width, out.height);
+      ctx.restore();
+    }
+
+    // Update particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+      if (!particles[i].update()) particles.splice(i, 1);
+    }
+
+    // ✅ Emit particles ONLY where mask confidence ≥ 0.3
+    const emitRate = parseInt(emitRateEl.value);
+    const densityMult = parseInt(densityMultEl.value);
+    const totalAttempts = emitRate * densityMult;
+
+    for (let e = 0; e < totalAttempts && particles.length < maxParticles; e++) {
+      const idx = Math.floor(Math.random() * maskConf.length);
+      const conf = maskConf[idx];
+      if (conf < 0.3) continue;
+
+      const px = idx % procW;
+      const py = Math.floor(idx / procW);
+      const imgIdx = idx * 4;
+      const r = data[imgIdx], g = data[imgIdx+1], b = data[imgIdx+2];
+
+      let [er, eg, eb] = enhanceColor(r, g, b);
+      if (er < 10 && eg < 10 && eb < 10) {
+        er = 255; eg = 128; eb = 64;
+      }
+
+      // ✅ Mirror emission position
+      const fx = (out.width - px * (out.width / procW));
+      const fy = py * (out.height / procH);
+      particles.push(new Particle(fx, fy, er, eg, eb));
+    }
+
+    // Draw particles
+    for (const p of particles) {
+      p.draw(ctx);
+    }
+
+    requestAnimationFrame(processFrame);
+  }
+
+  requestAnimationFrame(processFrame);
+})();
+</script>
+</body>
+</html>
